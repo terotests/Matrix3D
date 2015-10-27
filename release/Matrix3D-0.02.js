@@ -762,6 +762,7 @@
         var sinA = Math.sin(radAngle);
 
         this.updateFromParams(cosA + ax * ax * (1 - cosA), ay * ax * (1 - cosA) + az * sinA, az * ax * (1 - cosA) - ay * sinA, 0, ay * ax * (1 - cosA) - az * sinA, cosA + ay * ay * (1 - cosA), az * ay * (1 - cosA) + ax * sinA, 0, az * ax * (1 - cosA) + ay * sinA, ay * az * (1 - cosA) - ax * sinA, cosA + az * az * (1 - cosA), 0, 0, 0, 0, 1);
+        return this;
       };
 
       /**
@@ -866,6 +867,7 @@
        */
       _myTrait_.translate = function (v) {
         this.updateFromParams(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, v.x, v.y, v.z, 1);
+        return this;
       };
 
       /**
