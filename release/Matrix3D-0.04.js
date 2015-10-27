@@ -265,7 +265,7 @@
             if (list) {
               var me = this;
               list.forEach(function (i) {
-                me.applyTransformations(i, parentMatrix, getChildItems);
+                me.applyTransformations(i, parentMatrix, getChildItems, camera);
               });
             }
           }
@@ -330,7 +330,7 @@
             var rm = obj._renderMatrix,
                 me = this;
             list.forEach(function (i) {
-              me.applyTransformations(i, rm, getChildItems);
+              me.applyTransformations(i, rm, getChildItems, camera);
             });
           }
         }
