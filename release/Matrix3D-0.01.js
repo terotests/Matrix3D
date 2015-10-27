@@ -242,6 +242,94 @@
       // Initialize static variables here...
 
       /**
+      * Example function of how to create full 3D transformation for object.
+      The object is defined as:
+      ```javascript
+      var obj = {
+      _scaleMatrix : Matrix3D(),
+      _rotMatrix : Matrix3D(),
+      _transMatrix : Matrix3D(),
+      }
+      ```
+      Optionally can be given `_pivotPoint` to adjust the center of the rotation.
+       * @param Object obj  - Object containing the 3D matrixes 
+      * @param Matrix3D parentMatrix  - Matrix of the parent or null 
+      * @param Function getChildItems  - Function which 
+      */
+      _myTrait_.applyTransformations = function (obj, parentMatrix, getChildItems) {
+
+        if (!obj._scaleMatrix && !obj._rotMatrix && !obj._transMatrix) {
+          if (getChildItems) {
+            var list = getChildItems(obj);
+            if (list) {
+              var rm = this._renderMatrix,
+                  me = this;
+              list.forEach(function (i) {
+                me.applyTransforms(i, rm, getChildItems);
+              });
+            }
+          }
+        }
+
+        var local = Matrix3D();
+
+        // important to create a copy of the parent matrix first.
+        if (!parentMatrix) {
+          parentMatrix = Matrix3D();
+        } else {
+          parentMatrix = parentMatrix.createCopy();
+        }
+
+        if (!obj._lastParentMatrix) {
+          obj._lastParentMatrix = parentMatrix.createCopy();
+        } else {
+          obj._lastParentMatrix.copyFrom(parentMatrix);
+        }
+
+        // if object has a pivot point, adjust transformation
+        if (obj._pivotPoint) {
+          var adjustPivot = Matrix3D();
+          adjustPivot.translate({
+            x: -1 * obj._pivotPoint.x,
+            y: -1 * obj.pivotPoint.y,
+            z: 0
+          });
+        }
+
+        if (obj._transMatrix) {
+          local.matMul(obj._transMatrix);
+          var beforeRot = parentMatrix.createCopy();
+          beforeRot.matMul(obj._transMatrix);
+          obj._beforeRot = beforeRot;
+        }
+
+        if (obj._scaleMatrix) local.matMul(obj._scaleMatrix);
+        if (obj._rotMatrix) local.matMul(obj._rotMatrix);
+
+        if (adjustPivot) local.matMul(adjustPivot);
+
+        // set transformation of the object
+
+        obj._localTransform = local;
+
+        parentMatrix.matMul(local);
+        if (!obj._renderMatrix) obj._renderMatrix = new Matrix3D();
+
+        obj._renderMatrix.copyFrom(parentMatrix);
+
+        if (getChildItems) {
+          var list = getChildItems(obj);
+          if (list) {
+            var rm = this._renderMatrix,
+                me = this;
+            list.forEach(function (i) {
+              me.applyTransforms(i, rm, getChildItems);
+            });
+          }
+        }
+      };
+
+      /**
        * Copies data from other Matrix3D object
        * @param Object matrix  - Other matrix object, copy data from the object
        */
