@@ -126,9 +126,9 @@ if(!obj._scaleMatrix && !obj._rotMatrix && !obj._transMatrix) {
     if(getChildItems) {
         var list = getChildItems(obj);
         if(list) {
-            var rm = this._renderMatrix, me = this;
+            var me = this;
             list.forEach( function(i) {
-                me.applyTransforms( i, rm, getChildItems );
+                me.applyTransforms( i, parentMatrix, getChildItems );
             });
         }
     }    
@@ -180,7 +180,7 @@ obj._renderMatrix.copyFrom( parentMatrix );
 if(getChildItems) {
     var list = getChildItems(obj);
     if(list) {
-        var rm = this._renderMatrix, me = this;
+        var rm = obj._renderMatrix, me = this;
         list.forEach( function(i) {
             me.applyTransforms( i, rm, getChildItems );
         });
