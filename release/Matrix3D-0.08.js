@@ -68,22 +68,25 @@
           this._id = this.guid();
         }
 
-        if (typeof later != "undefined" && !_batchInited) {
+        if (!_batchInited) {
           _batchInited = true;
-          later().onFrame(function () {
-            for (var n in _transformBatches) {
-              var m = _transformBatches[n];
-              if (m._chListeners) {
-                m._chListeners.forEach(function (fn) {
-                  fn(m);
-                });
+          if (typeof later != "undefined") {
+
+            later().onFrame(function () {
+              for (var n in _transformBatches) {
+                var m = _transformBatches[n];
+                if (m._chListeners) {
+                  m._chListeners.forEach(function (fn) {
+                    fn(m);
+                  });
+                }
+                delete _transformBatches[n];
               }
-              delete _transformBatches[n];
-            }
-          });
-          _batchOn = true;
-        } else {
-          _batchOn = false;
+            });
+            _batchOn = true;
+          } else {
+            _batchOn = false;
+          }
         }
       });
 
