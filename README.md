@@ -31,6 +31,10 @@
 - [createThreeMatrix](README.md#Matrix3D_createThreeMatrix)
 - [createTransformCopy](README.md#Matrix3D_createTransformCopy)
 - [det](README.md#Matrix3D_det)
+- [dragTransformation](README.md#Matrix3D_dragTransformation)
+- [get2DTransform](README.md#Matrix3D_get2DTransform)
+- [get3DTransform](README.md#Matrix3D_get3DTransform)
+- [getCSSMatrix2D](README.md#Matrix3D_getCSSMatrix2D)
 - [getCSSMatrix3D](README.md#Matrix3D_getCSSMatrix3D)
 - [getRotation2D](README.md#Matrix3D_getRotation2D)
 - [getSVGTransform](README.md#Matrix3D_getSVGTransform)
@@ -57,6 +61,10 @@
     
 ##### trait matrixFn
 
+- [addChangeListener](README.md#matrixFn_addChangeListener)
+- [addToBatch](README.md#matrixFn_addToBatch)
+- [guid](README.md#matrixFn_guid)
+- [isArray](README.md#matrixFn_isArray)
 - [m00](README.md#matrixFn_m00)
 - [m01](README.md#matrixFn_m01)
 - [m02](README.md#matrixFn_m02)
@@ -73,6 +81,9 @@
 - [m31](README.md#matrixFn_m31)
 - [m32](README.md#matrixFn_m32)
 - [m33](README.md#matrixFn_m33)
+- [onChange](README.md#matrixFn_onChange)
+- [removeListener](README.md#matrixFn_removeListener)
+- [setBatching](README.md#matrixFn_setBatching)
 
 
     
@@ -98,12 +109,14 @@ The class has following internal singleton variables:
 * _m3dSupport
         
         
-### <a name="Matrix3D_applyTransformations"></a>Matrix3D::applyTransformations(obj, parentMatrix, getChildItems)
+### <a name="Matrix3D_applyTransformations"></a>Matrix3D::applyTransformations(obj, parentMatrix, getChildItems, camera)
 `obj` Object containing the 3D matrixes
  
 `parentMatrix` Matrix of the parent or null
  
 `getChildItems` Function which
+ 
+`camera` Camera object
  
 
 Example function of how to create full 3D transformation for object.
@@ -128,13 +141,16 @@ if(!obj._scaleMatrix && !obj._rotMatrix && !obj._transMatrix) {
         if(list) {
             var me = this;
             list.forEach( function(i) {
-                me.applyTransforms( i, parentMatrix, getChildItems );
+                me.applyTransformations( i, parentMatrix, getChildItems, camera );
             });
         }
     }    
 }
 
+// new local transformation matrix
 var local = Matrix3D();
+
+if(!obj._localTransform) obj._localTransform = Matrix3D();
 
 // important to create a copy of the parent matrix first.
 if(!parentMatrix) {
@@ -152,7 +168,7 @@ if(!obj._lastParentMatrix) {
 // if object has a pivot point, adjust transformation 
 if(obj._pivotPoint) {
     var adjustPivot = Matrix3D();
-    adjustPivot.translate( { x: -1*obj._pivotPoint.x,  y: -1*obj.pivotPoint.y, z:0});
+    adjustPivot.translate( { x: -1*obj._pivotPoint.x,  y: -1*obj._pivotPoint.y, z:-1*( obj._pivotPoint.z || 0) });
     
 }
 
@@ -170,19 +186,27 @@ if(adjustPivot) local.matMul(adjustPivot);
 
 // set transformation of the object
 
-obj._localTransform = local;
+obj._localTransform.copyFrom(local);
 
 parentMatrix.matMul( local );
 if(!obj._renderMatrix) obj._renderMatrix = new Matrix3D();
 
 obj._renderMatrix.copyFrom( parentMatrix );
 
+// if there is projection
+if(camera) {
+    var project = camera._renderMatrix.createCopy().inverse(); // the final matrix of the camera
+    project.matMul( obj._renderMatrix );
+    if(!obj._projectionMatrix) obj._projectionMatrix = new Matrix3D();
+    obj._projectionMatrix.copyFrom( project );
+}
+
 if(getChildItems) {
     var list = getChildItems(obj);
     if(list) {
         var rm = obj._renderMatrix, me = this;
         list.forEach( function(i) {
-            me.applyTransforms( i, rm, getChildItems );
+            me.applyTransformations( i, rm, getChildItems, camera );
         });
     }
 }
@@ -197,25 +221,28 @@ Copies data from other Matrix3D object
 ```javascript
 var mm = matrix._data;
 
-this._data.m00 = mm.m00;
-this._data.m01 = mm.m01;
-this._data.m02 = mm.m02;
-this._data.m03 = mm.m03;
+this.m00( mm.m00 );
+this.m01( mm.m01 );
+this.m02( mm.m02 );
+this.m03( mm.m03 );
 
-this._data.m10 = mm.m10;
-this._data.m11 = mm.m11;
-this._data.m12 = mm.m12;
-this._data.m13 = mm.m13;
+this.m10( mm.m10 );
+this.m11( mm.m11 );
+this.m12( mm.m12 );
+this.m13( mm.m13 );
 
-this._data.m20 = mm.m20;
-this._data.m21 = mm.m21;
-this._data.m22 = mm.m22;
-this._data.m23 = mm.m23;
+this.m20( mm.m20 );
+this.m21( mm.m21 );
+this.m22( mm.m22 );
+this.m23( mm.m23 );
 
-this._data.m30 = mm.m30;
-this._data.m31 = mm.m31;
-this._data.m32 = mm.m32;
-this._data.m33 = mm.m33;
+this.m30( mm.m30 );
+this.m31( mm.m31 );
+this.m32( mm.m32 );
+this.m33( mm.m33 );
+
+return this;
+
 ```
 
 ### <a name="Matrix3D_createCopy"></a>Matrix3D::createCopy(t)
@@ -318,28 +345,111 @@ var m00 = this.m00(), m01 = this.m01(), m02 = this.m02(), m03 = this.m03(),
  return   a0 * b5 - a1 * b4 + a2 * b3 + a3 * b2 - a4 * b1 + a5 * b0;
 ```
 
+### <a name="Matrix3D_dragTransformation"></a>Matrix3D::dragTransformation(dv, projectionState)
+`dv` Object containing information about the drag vector
+ 
+
+Projection state has the 3D area view fustrum, basicly the screen dimensions and perspective value. The `offset` has (x,y) indicating the view element position.
+
+```javascript
+{
+  screenWidth : 1000,
+  screenHeight : 1000,
+  perspective : 600,
+  offset : {
+      x : 100
+      y : 100
+  }
+}
+```
+
+The function will return Object with (x,y) which is current location, (sx,sy) the start location and (dx,dy) the relative location in the object&#39;s own space.
+```javascript
+var point = {};
+var interS = this.intersectPlane( {
+ x : projectionState.screenWidth / 2,
+ y : projectionState.screenHeight / 2,
+ z : projectionState.perspective
+},{
+ x :  dv.mx - projectionState.offset.x,
+ y :  dv.my - projectionState.offset.y,
+ z : 0
+});  
+var totInv = this.createCopy().inverse();
+var inSpace = totInv.projectVector({
+  x : interS.x,
+  y : interS.y,
+  z : interS.z,
+  w : 1
+})    
+if(dv.start) {
+    dv.spaceSx = inSpace.x;
+    dv.spaceSy = inSpace.y;
+}
+dv.spaceDx = parseInt( inSpace.x - dv.spaceSx ) ;
+dv.spaceDy = parseInt( inSpace.y - dv.spaceSy );  
+point.sx = dv.spaceSx;
+point.sy = dv.spaceSy;
+point.x = dv.spaceSx  + dv.spaceDx;
+point.y = dv.spaceSy  + dv.spaceDy;
+point.dx = dv.spaceDx;
+point.dy = dv.spaceDy;  
+
+return point;
+
+```
+
+### <a name="Matrix3D_get2DTransform"></a>Matrix3D::get2DTransform(t)
+`t` Accuracy of decimals used
+ 
+
+get CSS transform value
+```javascript
+var nn= t || 3;
+return "matrix("+this.m00().toFixed(nn)+", "+this.m01().toFixed(nn)+", " 
+       +this.m10().toFixed(nn)+", "+this.m11().toFixed(nn)+", "  
+       +this.m30().toFixed(nn)+", "+this.m31().toFixed(nn)+")";
+```
+
+### <a name="Matrix3D_get3DTransform"></a>Matrix3D::get3DTransform(t)
+`t` Accuracy of decimals used, default 3
+ 
+
+
+```javascript
+var nn = t || 3;
+return "matrix3d("+this.m00().toFixed(nn)+", "+this.m01().toFixed(nn)+", "+this.m02().toFixed(nn)+", "+this.m03().toFixed(nn)+"," 
+           +this.m10().toFixed(nn)+", "+this.m11().toFixed(nn)+", "+this.m12().toFixed(nn)+", "+this.m13().toFixed(nn)+","   
+           +this.m20().toFixed(nn)+", "+this.m21().toFixed(nn)+", "+this.m22().toFixed(nn)+", "+this.m23().toFixed(nn)+","   
+           +this.m30().toFixed(nn)+", "+this.m31().toFixed(nn)+", "+this.m32().toFixed(nn)+", "+this.m33().toFixed(nn)+")";
+```
+
+### <a name="Matrix3D_getCSSMatrix2D"></a>Matrix3D::getCSSMatrix2D(t)
+
+
+```javascript
+var nn=3;
+var tStr = this.get2DTransform();
+       
+return "transform:"+tStr+";-webkit-transform:"+tStr+";-ms-transform:"+tStr+";-webkit-transform-origin:0 0;-ms-transform-origin:0 0;";    
+
+```
+
 ### <a name="Matrix3D_getCSSMatrix3D"></a>Matrix3D::getCSSMatrix3D(t)
 
 Returns transformation matrix, matrix3d if CSS3D is supported, otherwise it will return matrix(...)
 ```javascript
 
 _m3dSupport = this.systemHas3D();
-var nn=5;
+var nn=3;
 
 if(_m3dSupport) {
-    var tStr =  "matrix3d("+this.m00().toFixed(nn)+", "+this.m01().toFixed(nn)+", "+this.m02().toFixed(nn)+", "+this.m03().toFixed(nn)+"," 
-           +this.m10().toFixed(nn)+", "+this.m11().toFixed(nn)+", "+this.m12().toFixed(nn)+", "+this.m13().toFixed(nn)+","   
-           +this.m20().toFixed(nn)+", "+this.m21().toFixed(nn)+", "+this.m22().toFixed(nn)+", "+this.m23().toFixed(nn)+","   
-           +this.m30().toFixed(nn)+", "+this.m31().toFixed(nn)+", "+this.m32().toFixed(nn)+", "+this.m33().toFixed(nn)+")";
-           
-    return tStr+";-webkit-transform:"+tStr+";-ms-transform:"+tStr+";-webkit-transform-origin:0 0;-ms-transform-origin:0 0;";
+    var tStr = this.get3DTransform();
+    return "transform:"+tStr+";-webkit-transform:"+tStr+";-ms-transform:"+tStr+";-webkit-transform-origin:0 0;-ms-transform-origin:0 0;";
 } else {
-    var tStr =  "matrix("+this.m00().toFixed(nn)+", "+this.m01().toFixed(nn)+", " 
-           +this.m10().toFixed(nn)+", "+this.m11().toFixed(nn)+", "  
-           +this.m30().toFixed(nn)+", "+this.m31().toFixed(nn)+")";
-           
-    return tStr+";-webkit-transform:"+tStr+";-ms-transform:"+tStr+";-webkit-transform-origin:0 0;-ms-transform-origin:0 0;";    
+    return getCSSMatrix2D();
 }
+  
 
 ```
 
@@ -558,7 +668,7 @@ return this;
 
 ### <a name="Matrix3D_normalize"></a>Matrix3D::normalize(t)
 
-Will set the transformation back to normal values. TODO: should actually normalize the vectors of the Matrix, so is not really correct function.
+Will transform this matrix into normal matrix.
 ```javascript
 
 this.copyFrom( new Matrix3D() );
@@ -625,7 +735,7 @@ this.updateFromParams(
       az * ax * (1 - cosA) + ay * sinA, ay * az * (1 - cosA) - ax * sinA, cosA + az * az * (1 - cosA), 0,
       0, 0, 0, 1
     );
-
+return this;
 ```
 
 ### <a name="Matrix3D_scale"></a>Matrix3D::scale(s)
@@ -748,6 +858,7 @@ this.updateFromParams(
     0, 0, 1, 0,
     v.x, v.y, v.z, 1
   );
+return this;
 ```
 
 ### <a name="Matrix3D_updateFromParams"></a>Matrix3D::updateFromParams(t)
@@ -755,28 +866,27 @@ this.updateFromParams(
 Updates the matrix values from a function arguments, 16 argumens can be given.
 ```javascript
 
-var d = this._data;
 var i=0;
 
-d.m00 = arguments[i++];
-d.m01 = arguments[i++];
-d.m02 = arguments[i++];
-d.m03 = arguments[i++];
+this.m00( arguments[i++] );
+this.m01( arguments[i++] );
+this.m02( arguments[i++] );
+this.m03( arguments[i++] );
 
-d.m10 = arguments[i++];
-d.m11 = arguments[i++];
-d.m12 = arguments[i++];
-d.m13 = arguments[i++];
+this.m10( arguments[i++] );
+this.m11( arguments[i++] );
+this.m12( arguments[i++] );
+this.m13( arguments[i++] );
 
-d.m20 = arguments[i++];
-d.m21 = arguments[i++];
-d.m22 = arguments[i++];
-d.m23 = arguments[i++];
+this.m20( arguments[i++] );
+this.m21( arguments[i++] );
+this.m22( arguments[i++] );
+this.m23( arguments[i++] );
 
-d.m30 = arguments[i++];
-d.m31 = arguments[i++];
-d.m32 = arguments[i++];
-d.m33 = arguments[i++];
+this.m30( arguments[i++] );
+this.m31( arguments[i++] );
+this.m32( arguments[i++] );
+this.m33( arguments[i++] );
 
 ```
 
@@ -788,8 +898,43 @@ d.m33 = arguments[i++];
 
 The class has following internal singleton variables:
         
+* _transformBatches
         
-### matrixFn::constructor( t )
+* _batchListeners
+        
+* _batchOn
+        
+* _batchInited
+        
+* _subBatches
+        
+        
+### <a name="matrixFn_addChangeListener"></a>matrixFn::addChangeListener(fn)
+
+
+```javascript
+
+if(!this._chListeners) this._chListeners = [];
+this._chListeners.push(fn);
+
+```
+
+### <a name="matrixFn_addToBatch"></a>matrixFn::addToBatch(t)
+
+
+```javascript
+if(_batchOn) _transformBatches[this._id] = this;
+```
+
+### <a name="matrixFn_guid"></a>matrixFn::guid(t)
+
+
+```javascript
+return Math.random().toString(36).substring(2, 15) +
+        Math.random().toString(36).substring(2, 15);
+```
+
+### matrixFn::constructor( options )
 
 ```javascript
 
@@ -799,15 +944,83 @@ this._data = {
     m20 : 0, m21 : 0, m22 : 1, m23:0,
     m30 : 0, m31 : 0, m32 : 0, m33:1
 };
+
+if(!_transformBatches) {
+    _transformBatches = {};
+    _subBatches = {};
+}
+
+if(this.isArray(options)) {
+    // list of matrixes to listen and then calculate the result based on them
+    this._subMatrixes = options;
+    var me = this;
+    for(var i=0; i<options.length; i++) {
+        var subM = options[i];
+        subM.onChange( function() {
+            _subBatches[me._id] = me;
+        });
+    }
+    this._id = this.guid();
+} else {
+    var noBatching = options;
+    if(noBatching) {
+        this._id = "t";
+    } else {
+        this._id = this.guid();
+    }
+}
+
+if(!_batchInited) {
+    _batchInited = true;
+    if(typeof(later) != "undefined") {
+        
+        later().onFrame( function() {
+            for(var n in _subBatches) {
+                var m = _subBatches[n];
+                var list = m._subMatrixes;
+                m.normalize();
+                list.forEach( function(sub) {
+                    m.matMul(sub);
+                });
+                delete _subBatches[n];
+            }
+            for(var n in _transformBatches) {
+                var m = _transformBatches[n];
+                if(m._chListeners) {
+                    m._chListeners.forEach( function(fn) {
+                        fn( m );
+                    });
+                }
+                delete _transformBatches[n];
+            } 
+        });
+        _batchOn = true;
+    } else {
+        _batchOn = false;
+    }
+}
+
 ```
         
+### <a name="matrixFn_isArray"></a>matrixFn::isArray(someVar)
+`someVar` Variable to test
+ 
+
+
+```javascript
+return Object.prototype.toString.call( someVar ) === '[object Array]';
+```
+
 ### <a name="matrixFn_m00"></a>matrixFn::m00(t)
 
 
 ```javascript
 
 if(typeof(t)!="undefined") {
-    if(this._data.m00 != t) this._dirty = true;
+    if(this._data.m00 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m00 = t;
     return this;
 }
@@ -819,7 +1032,10 @@ return this._data.m00;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m01 != t) this._dirty = true;
+    if(this._data.m01 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m01 = t;
     return this;
 }
@@ -831,7 +1047,10 @@ return this._data.m01;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m02 != t) this._dirty = true;
+    if(this._data.m02 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m02 = t;
     return this;
 }
@@ -843,7 +1062,10 @@ return this._data.m02;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m03 != t) this._dirty = true;
+    if(this._data.m03 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m03 = t;
     return this;
 }
@@ -855,7 +1077,10 @@ return this._data.m03;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m10 != t) this._dirty = true;
+    if(this._data.m10 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m10 = t;
     return this;
 }
@@ -867,7 +1092,10 @@ return this._data.m10;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m11 != t) this._dirty = true;
+    if(this._data.m11 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m11 = t;
     return this;
 }
@@ -879,7 +1107,10 @@ return this._data.m11;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m12 != t) this._dirty = true;
+    if(this._data.m12 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m12 = t;
     return this;
 }
@@ -891,7 +1122,10 @@ return this._data.m12;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m13 != t) this._dirty = true;
+    if(this._data.m13 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m13 = t;
     return this;
 }
@@ -903,7 +1137,10 @@ return this._data.m13;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m20 != t) this._dirty = true;
+    if(this._data.m20 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m20 = t;
     return this;
 }
@@ -915,7 +1152,10 @@ return this._data.m20;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m21 != t) this._dirty = true;
+    if(this._data.m21 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m21 = t;
     return this;
 }
@@ -927,7 +1167,10 @@ return this._data.m21;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m22 != t) this._dirty = true;
+    if(this._data.m22 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    };
     this._data.m22 = t;
     return this;
 }
@@ -939,7 +1182,10 @@ return this._data.m22;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m23 != t) this._dirty = true;
+    if(this._data.m23 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m23 = t;
     return this;
 }
@@ -951,7 +1197,10 @@ return this._data.m23;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m30 != t) this._dirty = true;
+    if(this._data.m30 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m30 = t;
     return this;
 }
@@ -963,7 +1212,10 @@ return this._data.m30;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m31 != t) this._dirty = true;
+    if(this._data.m31 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m31 = t;
     return this;
 }
@@ -975,7 +1227,10 @@ return this._data.m31;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m32 != t) this._dirty = true;
+    if(this._data.m32 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m32 = t;
     return this;
 }
@@ -987,11 +1242,43 @@ return this._data.m32;
 
 ```javascript
 if(typeof(t)!="undefined") {
-    if(this._data.m33 != t) this._dirty = true;
+    if(this._data.m33 != t) {
+        this._dirty = true;
+        if(_batchOn) _transformBatches[this._id] = this;
+    }
     this._data.m33 = t;
     return this;
 }
 return this._data.m33;
+```
+
+### <a name="matrixFn_onChange"></a>matrixFn::onChange(fn)
+
+
+```javascript
+if(!this._chListeners) this._chListeners = [];
+this._chListeners.push(fn);
+
+```
+
+### <a name="matrixFn_removeListener"></a>matrixFn::removeListener(fn)
+`fn` Function to remove
+ 
+
+
+```javascript
+if(!this._chListeners) return;
+var i = this._chListeners.indexOf(fn);
+if(i>=0) this._chListeners.splice(i,1);
+```
+
+### <a name="matrixFn_setBatching"></a>matrixFn::setBatching(onOff)
+`onOff` true or false
+ 
+
+Enable / Disable matrix batching
+```javascript
+_batchOn  = onOff;
 ```
 
 
